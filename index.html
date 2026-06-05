@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>粗大ごみ or 業者引取り チェッカー</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Hiragino Sans', 'Meiryo', sans-serif; background: #f5f5f0; color: #222; }
+  .app { max-width: 520px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 18px; font-weight: 700; text-align: center; padding: 16px 0 4px; color: #1a1a1a; }
+  .sub { font-size: 12px; text-align: center; color: #888; margin-bottom: 20px; }
+
+  .add-area { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.07); }
+  .add-area label { font-size: 12px; color: #555; display: block; margin-bottom: 6px; }
+  .add-row { display: flex; gap: 8px; }
+  .add-row input { flex: 1; border: 1.5px solid #ddd; border-radius: 8px; padding: 9px 12px; font-size: 14px; outline: none; }
+  .add-row input:focus { border-color: #4a90e2; }
+  .add-row button { background: #4a90e2; color: #fff; border: none; border-radius: 8px; padding: 9px 16px; font-size: 14px; cursor: pointer; white-space: nowrap; }
+  .add-row button:hover { background: #357abd; }
+
+  .item-list { display: flex; flex-direction: column; gap: 10px; }
+  .item-card { background: #fff; border-radius: 12px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.07); }
+  .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .item-name { font-size: 15px; font-weight: 600; }
+  .remove-btn { background: none; border: none; color: #ccc; font-size: 18px; cursor: pointer; line-height: 1; }
+  .remove-btn:hover { color: #e55; }
+
+  .q-label { font-size: 11px; color: #777; margin-bottom: 4px; }
+  .q-row { display: flex; gap: 6px; margin-bottom: 9px; flex-wrap: wrap; }
+  .q-btn { flex: 1; min-width: 80px; padding: 7px 4px; border-radius: 7px; border: 1.5px solid #ddd; background: #fafafa; font-size: 12px; cursor: pointer; text-align: center; transition: all .15s; }
+  .q-btn.active-yes { background: #e8f4ff; border-color: #4a90e2; color: #2a6db5; font-weight: 600; }
+  .q-btn.active-no  { background: #fff0f0; border-color: #e05555; color: #c03030; font-weight: 600; }
+  .q-btn.active-mid { background: #fff8e6; border-color: #d4941a; color: #a06010; font-weight: 600; }
+
+  .result-badge { display: inline-block; border-radius: 20px; padding: 6px 16px; font-size: 13px; font-weight: 700; margin-top: 6px; }
+  .badge-sodai   { background: #ffe0e0; color: #c03030; }
+  .badge-jimoty  { background: #fff3cd; color: #856404; }
+  .badge-kaitori { background: #d4edda; color: #155724; }
+  .badge-pending { background: #f0f0f0; color: #888; }
+  .result-note { font-size: 11px; color: #666; margin-top: 4px; }
+
+  .summary { background: #fff; border-radius: 12px; padding: 14px; margin-top: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.07); }
+  .summary h2 { font-size: 13px; color: #555; margin-bottom: 10px; }
+  .summary-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+  .summary-row:last-child { border-bottom: none; }
+  .empty { text-align: center; color: #bbb; font-size: 13px; padding: 24px 0; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>🗑️ 粗大ごみ or 業者引取り チェッカー</h1>
+  <p class="sub">品目を追加して質問に答えると処分方法を判定します</p>
+
+  <div class="add-area">
+    <label>品目名を入力</label>
+    <div class="add-row">
+      <input type="text" id="itemInput" placeholder="例：洗濯機、ソファ、自転車…" />
+      <button onclick="addItem()">追加</button>
+    </div>
+  </div>
+
+  <div class="item-list" id="itemList">
+    <div class="empty">品目を追加してください</div>
+  </div>
+
+  <div class="summary" id="summary" style="display:none">
+    <h2>📋 判定まとめ</h2>
+    <div id="summaryContent"></div>
+  </div>
+</div>
+
+<script>
+let items = [];
+let nextId = 1;
+
+const presets = [
+  { name: 'チャイルドシート', years: 'over',  works: null, price: null },
+  { name: 'ストライダー',     years: 'over',  works: null, price: null },
+  { name: '空気清浄機',       years: 'over',  works: null, price: null },
+  { name: 'ルーロ',           years: 'under', works: 'no', price: null },
+  { name: 'プリンター',       years: 'over',  works: null, price: null },
+];
+
+function addItem(preset) {
+  const input = document.getElementById('itemInput');
+  const name = preset ? preset.name : input.value.trim();
+  if (!name) { input.focus(); return; }
+  items.push({
+    id: nextId++,
+    name,
+    years: preset ? preset.years : null,
+    works: preset ? preset.works : null,
+    price: preset ? preset.price : null,
+  });
+  if (!preset) input.value = '';
+  render();
+}
+
+function removeItem(id) {
+  items = items.filter(i => i.id !== id);
+  render();
+}
+
+function setAttr(id, key, val) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  item[key] = val;
+  if (key === 'years') { item.works = null; item.price = null; }
+  if (key === 'works') { item.price = null; }
+  render();
+}
+
+function judge(item) {
+  if (!item.years) return { label: '判定中…', type: 'pending', note: '' };
+  if (item.years === 'over') return { label: '粗大ごみ', type: 'sodai', note: '10年超は業者査定がほぼつかない' };
+  if (!item.works) return { label: '判定中…', type: 'pending', note: '' };
+  if (item.works === 'no') return { label: '粗大ごみ', type: 'sodai', note: '故障品は査定ゼロが基本' };
+  if (!item.price) return { label: '判定中…', type: 'pending', note: '' };
+  if (item.price === 'high') return { label: '買取・おいくら', type: 'kaitori', note: '中古相場あり。複数業者で見積もりを' };
+  if (item.price === 'mid')  return { label: 'ジモティー優先', type: 'jimoty',  note: '0円〜数千円で引取り手が見つかることも' };
+  return { label: '粗大ごみ', type: 'sodai', note: '相場が低く回収費のほうが高くなりがち' };
+}
+
+function badgeClass(type) {
+  return { sodai:'badge-sodai', jimoty:'badge-jimoty', kaitori:'badge-kaitori', pending:'badge-pending' }[type] || 'badge-pending';
+}
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function render() {
+  const list = document.getElementById('itemList');
+  const summaryEl = document.getElementById('summary');
+  const summaryContent = document.getElementById('summaryContent');
+
+  if (items.length === 0) {
+    list.innerHTML = '<div class="empty">品目を追加してください</div>';
+    summaryEl.style.display = 'none';
+    return;
+  }
+
+  list.innerHTML = items.map(item => {
+    const result = judge(item);
+    let questions = '';
+
+    questions += `
+      <div class="q-label">① 製造・購入から10年以内？</div>
+      <div class="q-row">
+        <div class="q-btn ${item.years==='under'?'active-yes':''}" onclick="setAttr(${item.id},'years','under')">✅ 10年以内</div>
+        <div class="q-btn ${item.years==='over'?'active-no':''}"  onclick="setAttr(${item.id},'years','over')">❌ 10年以上</div>
+      </div>`;
+
+    if (item.years === 'under') {
+      questions += `
+      <div class="q-label">② 現在、正常に動作する？</div>
+      <div class="q-row">
+        <div class="q-btn ${item.works==='yes'?'active-yes':''}" onclick="setAttr(${item.id},'works','yes')">✅ 動作する</div>
+        <div class="q-btn ${item.works==='no'?'active-no':''}"  onclick="setAttr(${item.id},'works','no')">❌ 故障・不動</div>
+      </div>`;
+    }
+
+    if (item.years === 'under' && item.works === 'yes') {
+      questions += `
+      <div class="q-label">③ 新品3万円以上 かつ 中古相場5,000円以上？</div>
+      <div class="q-row">
+        <div class="q-btn ${item.price==='high'?'active-yes':''}" onclick="setAttr(${item.id},'price','high')">✅ 両方あてはまる</div>
+        <div class="q-btn ${item.price==='mid'?'active-mid':''}"  onclick="setAttr(${item.id},'price','mid')">🟡 新品3万以上のみ</div>
+        <div class="q-btn ${item.price==='low'?'active-no':''}"  onclick="setAttr(${item.id},'price','low')">❌ どちらも低い</div>
+      </div>`;
+    }
+
+    return `
+    <div class="item-card">
+      <div class="item-header">
+        <span class="item-name">📦 ${esc(item.name)}</span>
+        <button class="remove-btn" onclick="removeItem(${item.id})">✕</button>
+      </div>
+      ${questions}
+      <span class="result-badge ${badgeClass(result.type)}">${result.label}</span>
+      ${result.note ? `<div class="result-note">${result.note}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  summaryContent.innerHTML = items.map(item => {
+    const r = judge(item);
+    return `<div class="summary-row">
+      <span>${esc(item.name)}</span>
+      <span class="result-badge ${badgeClass(r.type)}" style="font-size:11px;padding:3px 10px">${r.label}</span>
+    </div>`;
+  }).join('');
+
+  summaryEl.style.display = items.length >= 2 ? 'block' : 'none';
+}
+
+document.getElementById('itemInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') addItem();
+});
+
+presets.forEach(p => addItem(p));
+</script>
+</body>
+</html>
